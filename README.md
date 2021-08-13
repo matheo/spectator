@@ -30,6 +30,8 @@ Spectator helps you get rid of all the boilerplate grunt work, leaving you with 
 
 ## Table of Contents
 
+- [Features](#features)
+- [Table of Contents](#table-of-contents)
 - [Installation](#installation)
   - [NPM](#npm)
   - [Yarn](#yarn)
@@ -58,6 +60,7 @@ Spectator helps you get rid of all the boilerplate grunt work, leaving you with 
 - [Testing Pipes](#testing-pipes)
   - [Using Custom Host Component](#using-custom-host-component)
 - [Mocking Providers](#mocking-providers)
+  - [Mocking OnInit Dependencies](#mocking-oninit-dependencies)
 - [Jest Support](#jest-support)
 - [Testing with HTTP](#testing-with-http)
 - [Global Injections](#global-injections)
@@ -65,6 +68,7 @@ Spectator helps you get rid of all the boilerplate grunt work, leaving you with 
 - [Custom Matchers](#custom-matchers)
 - [Schematics](#schematics)
 - [Default Schematics Collection](#default-schematics-collection)
+- [Working Spectator & Jest Sample Repo and Karma Comparison](#working-spectator--jest-sample-repo-and-karma-comparison)
 - [Core Team](#core-team)
 - [Contributors](#contributors)
 
@@ -135,6 +139,7 @@ it('should...', () => {
       title: 'Click'
     },
     // Override the component's providers
+    // Note that you must declare it once in `createComponentFactory`
     providers: [],
     // Whether to run change detection (defaults to true)
     detectChanges: false
@@ -161,6 +166,14 @@ const service = spectator.inject(QueryService, fromComponentInjector);
 ```ts
 spectator.detectChanges();
 ```
+
+- `detectComponentChanges()` - Runs `detectChanges` on the **tested** component ( not on the `host` ).
+  You'll need this method in __rare__ cases when using a `host` and the tested component is `onPush`, and you want to force it to run a change detection cycle.
+
+```ts
+spectator.detectComponentChanges();
+```
+
 - `setInput()` - Changes the value of an @Input() of the tested component.
   Method runs `ngOnChanges` with `SimpleChanges` manually if it exists.
 ```ts
@@ -247,7 +260,11 @@ spectator.dispatchTouchEvent(byText('Element'), type, x, y);
 You can trigger custom events (@Output() of child components) [using](https://github.com/ngneat/spectator/blob/master/projects/spectator/test/child-custom-event/child-custom-event-parent.component.spec.ts) the following method:
 ```ts
 spectator.triggerEventHandler(MyChildComponent, 'myCustomEvent', 'eventValue');
+spectator.triggerEventHandler(MyChildComponent, 'myCustomEvent', 'eventValue', { root: true});
+
 spectator.triggerEventHandler('app-child-component', 'myCustomEvent', 'eventValue');
+spectator.triggerEventHandler('app-child-component', 'myCustomEvent', 'eventValue', { root: true});
+
 ```
 
 #### Event Creators
@@ -490,7 +507,7 @@ The host method returns an instance of `SpectatorHost` which extends `Spectator`
 - `queryHostAll` - Read more about querying in Spectator
 
 ### Custom Host Component
-Sometimes it's helpful to pass your own host implementation. We can pass a custom host component to the `createHostComponentFactory()` that will replace the default one:
+Sometimes it's helpful to pass your own host implementation. We can pass a custom host component to the `createHostFactory()` that will replace the default one:
 
 ```ts
 @Component({ selector: 'custom-host', template: '' })
@@ -889,6 +906,28 @@ const createService = createServiceFactory({
 });
 ```
 
+### Mocking OnInit dependencies
+
+If a component relies on a service being mocked in the [OnInit](https://angular.io/api/core/OnInit) lifecycle method, change-detection needs to be disabled until after the services have been injected.
+
+To configure this, change the `createComponent` method to have the `detectChanges` option set to false and then manually call `detectChanges` on the spectator after setting up the injected services.
+
+```ts
+const createComponent = createComponentFactory({
+  component: WeatherDashboardComponent
+});
+
+it('should call the weather api on init', () => {
+  const spectator = createComponent({
+    detectChanges: false
+  });
+  const weatherService = spectator.inject(WeatherDataApi);
+  weatherService.getWeatherData.andReturn(of(mockWeatherData));
+  spectator.detectChanges();
+  expect(weatherService.getWeatherData).toHaveBeenCalled();
+})
+```
+
 ## Jest Support
 By default, Spectator uses Jasmine for creating spies. If you are using Jest as test framework instead, you can let Spectator create Jest-compatible spies.
 
@@ -1074,21 +1113,34 @@ The same rules also apply to directives using the `directiveProviders` and `dire
 expect('.zippy__content').not.toExist();
 expect('.zippy__content').toHaveLength(3);
 expect('.zippy__content').toHaveId('id');
-expect('.zippy__content').toHaveClass('class');
-expect('.zippy__content').toHaveClass('class a, class b');
-expect('.zippy__content').toHaveClass(['class a', 'class b']);
 expect(spectator.query('.zippy')).toHaveAttribute('id', 'zippy');
 expect(spectator.query('.zippy')).toHaveAttribute({id: 'zippy'});
 expect(spectator.query('.checkbox')).toHaveProperty('checked', true);
 expect(spectator.query('.img')).toHaveProperty({src: 'assets/myimg.jpg'});
 expect(spectator.query('.img')).toContainProperty({src: 'myimg.jpg'});
-expect('.zippy__content').toHaveText('Content');
-expect('.zippy__content').toContainText('Content');
 
-// Note this looks for multiple elements with the class and checks the text of each array element against the index of the element found
+// Note that toHaveClass accepts classes only in strict order. If order is irrelevant, disable strict mode manually.
+expect('.zippy__content').toHaveClass('class');
+expect('.zippy__content').toHaveClass('class-a, class-b');
+expect('.zippy__content').not.toHaveClass('class-b, class-a');
+expect('.zippy__content').toHaveClass(['class-a', 'class-b']);
+expect('.zippy__content').not.toHaveClass(['class-b', 'class-a']);
+
+expect('.zippy__content').toHaveClass('class', { strict: false });
+expect('.zippy__content').toHaveClass('class-a, class-b', { strict: false });
+expect('.zippy__content').toHaveClass('class-b, class-a', { strict: false });
+expect('.zippy__content').toHaveClass(['class-b', 'class-a'], { strict: false });
+expect('.zippy__content').toHaveClass(['class-b', 'class-a'], { strict: false });
+
+// Note that toHaveText only looks for the existence of a string, not if the string is exactly the same. If you want to verify that the string is completely the same, use toHaveExactText.
+// Note that if you pass multiple values, Spectator checks the text of each array element against the index of the element found. 
+expect('.zippy__content').toHaveText('Content');
 expect('.zippy__content').toHaveText(['Content A', 'Content B']);
-expect('.zippy__content').toContainText(['Content A', 'Content B']);
 expect('.zippy__content').toHaveText((text) => text.includes('..'));
+expect('.zippy__content').toContainText('Content');
+expect('.zippy__content').toContainText(['Content A', 'Content B']);
+expect('.zippy__content').toHaveExactText('Content');
+expect('.zippy__content').toHaveExactText(['Content A', 'Content B']);
 expect('.zippy__content').toHaveValue('value');
 expect('.zippy__content').toContainValue('value');
 
@@ -1106,6 +1158,7 @@ expect('element').toBeSelected();
 expect('element').toBeVisible();
 expect('input').toBeFocused();
 expect('div').toBeMatchedBy('.js-something');
+expect(spectator.component.object).toBePartial({ aProperty: 'aValue' });
 expect('div').toHaveDescendant('.child');
 expect('div').toHaveDescendantWithText({selector: '.child', text: 'text'});
 ```
@@ -1143,6 +1196,13 @@ The `spectator` schematics extend the default `@schematics/angular` collection. 
   }
 }
 ```
+
+## Working Spectator & Jest Sample Repo and Karma Comparison
+
+The [examples in Karma]((https://stackblitz.com/angular/pmqopjovvvb?file=src%2Fapp%2Fapp.component.html)) from Angular docs [testing developer guide](https://angular.io/guide/testing) has been reproduced in Spectator and Jest. 
+(For convenience, [this is the local version](https://github.com/muratkeremozcan/books/tree/master/Angular_with_Typescript/angular-unit-testing-with-Karma) of the Karma examples.)
+
+The Spectator & Jest version can be accessed [here](https://github.com/muratkeremozcan/angular-playground).
 
 ## Core Team
 

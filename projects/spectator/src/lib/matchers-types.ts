@@ -6,7 +6,7 @@ declare namespace jasmine {
 
     toHaveId(id: string | number): boolean;
 
-    toHaveClass(className: string | string[]): boolean;
+    toHaveClass(className: string | string[], options?: { strict: boolean }): boolean;
 
     toHaveAttribute(attr: string | object, val?: string): boolean;
 
@@ -14,11 +14,11 @@ declare namespace jasmine {
 
     toContainProperty(prop: string | object, val?: string): boolean;
 
-    toHaveText(text: string | string[] | Function, exact?: boolean): boolean;
+    toHaveText(text: string | string[] | ((text: string) => boolean), exact?: boolean): boolean;
 
-    toContainText(text: string | string[] | Function, exact?: boolean): boolean;
+    toContainText(text: string | string[] | ((text: string) => boolean), exact?: boolean): boolean;
 
-    toHaveExactText(text: string | string[] | Function): boolean;
+    toHaveExactText(text: string | string[] | ((text: string) => boolean)): boolean;
 
     toHaveValue(value: string | string[]): boolean;
 
@@ -33,6 +33,8 @@ declare namespace jasmine {
     toBeDisabled(): boolean;
 
     toBeEmpty(): boolean;
+
+    toBePartial(partial: object): boolean;
 
     toBeHidden(): boolean;
 

@@ -201,15 +201,18 @@ export abstract class DomSpectator<I> extends BaseSpectator {
   public triggerEventHandler<C = any, K extends KeysMatching<C, EventEmitter<any>> = any>(
     directiveOrSelector: Type<C> | string | DebugElement,
     eventName: K,
-    eventObj: EventEmitterType<C[K]>
+    eventObj: EventEmitterType<C[K]>,
+    options?: { root: boolean }
   ) {
-    const debugElement = this.getDebugElement(directiveOrSelector);
-    if (!debugElement) {
-      // tslint:disable:no-console
+    const triggerDebugElement = this.getTriggerDebugElement(directiveOrSelector, options);
+    if (!triggerDebugElement) {
+      /* eslint-disable no-console */
       console.error(`${directiveOrSelector} does not exists`);
       return;
     }
-    debugElement.triggerEventHandler(eventName as string, eventObj);
+
+    triggerDebugElement.triggerEventHandler(eventName as string, eventObj);
+
     this.detectChanges();
   }
 
@@ -229,7 +232,7 @@ export abstract class DomSpectator<I> extends BaseSpectator {
       },
       pressBackspace: (selector: SpectatorElement = this.element, event = KEY_UP) => {
         this.dispatchKeyboardEvent(selector, event, { key: 'Backspace', keyCode: 8 });
-      }
+      },
     };
   }
 
@@ -240,7 +243,7 @@ export abstract class DomSpectator<I> extends BaseSpectator {
       },
       dblclick: (selector: SpectatorElement = this.element) => {
         this.dispatchMouseEvent(selector, 'dblclick');
-      }
+      },
     };
   }
 
@@ -271,7 +274,7 @@ export abstract class DomSpectator<I> extends BaseSpectator {
 
     // Support global objects window and document
     if (selector === window || selector === document) {
-      return selector;
+      return selector as any;
     }
 
     if (isString(selector)) {
@@ -279,7 +282,7 @@ export abstract class DomSpectator<I> extends BaseSpectator {
       if (exists) {
         element = exists.nativeElement;
       } else {
-        // tslint:disable:no-console
+        /* eslint-disable no-console */
         console.error(`${selector} does not exists`);
       }
     } else if (selector instanceof DOMSelector) {
@@ -295,15 +298,39 @@ export abstract class DomSpectator<I> extends BaseSpectator {
     return element;
   }
 
-  private getDebugElement(directiveOrSelector: string | DebugElement | Type<unknown>) {
-    let debugElement: DebugElement;
+  private getTriggerDebugElement(
+    directiveOrSelector: string | DebugElement | Type<unknown>,
+    options?: { root: boolean }
+  ): DebugElement | undefined {
+    const debugElement = options?.root ? this.getRootDebugElement() : this.debugElement;
+
     if (isString(directiveOrSelector)) {
-      debugElement = this.debugElement.query(By.css(directiveOrSelector));
+      return debugElement.query(By.css(directiveOrSelector));
     } else if (directiveOrSelector instanceof DebugElement) {
-      debugElement = directiveOrSelector;
+      return directiveOrSelector;
     } else {
-      debugElement = this.debugElement.query(By.directive(directiveOrSelector));
+      return debugElement.query(By.directive(directiveOrSelector));
     }
-    return debugElement;
+  }
+
+  private getRootDebugElement(): DebugElement {
+    let element: DebugElement | null | undefined = this.debugElement;
+
+    /**
+     * This bounded loop call is required to access the debug element for
+     * root dom element
+     */
+    while (true) {
+      if (!element) {
+        throw Error('Unable to find root element');
+      }
+
+      if (!element.parent) {
+        // Found the root element
+        return element;
+      }
+
+      element = element.parent;
+    }
   }
 }

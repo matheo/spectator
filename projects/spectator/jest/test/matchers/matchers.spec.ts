@@ -1,6 +1,11 @@
-import { toBeVisible } from '@ngneat/spectator';
+import { toBeVisible, toBePartial } from '@ngneat/spectator';
 import { createComponentFactory, Spectator } from '@ngneat/spectator/jest';
 import { Component } from '@angular/core';
+
+interface Dummy {
+  lorem: string;
+  ipsum: string;
+}
 
 @Component({
   template: `
@@ -11,6 +16,7 @@ import { Component } from '@angular/core';
     <div style="display:none"><div id="parent-display-none">Hidden by parent with display none</div></div>
     <div style="visibility:hidden"><div id="parent-visibility-hidden">Hidden by parent with display none</div></div>
     <div id="visible">Visible</div>
+    <div id="classes" class="class-a class-b">Classes</div>
   `
 })
 export class MatchersComponent {}
@@ -80,6 +86,35 @@ describe('Matchers', () => {
 
     it('should detect element hidden parent with by "visibility:hidden"-style, as being hidden', () => {
       expect('#parent-visibility-hidden').toBeHidden();
+    });
+
+    it('should be possible to validate an element that has classes in strict order', () => {
+      expect('#classes').toHaveClass(['class-a', 'class-b']);
+      expect('#classes').toHaveClass(['class-a', 'class-b'], { strict: true });
+      expect('#classes').not.toHaveClass(['class-b', 'class-a']);
+      expect('#classes').not.toHaveClass(['class-b', 'class-a'], { strict: true });
+    });
+
+    it('should be possible to validate an element that has classes in any order', () => {
+      expect('#classes').toHaveClass(['class-a', 'class-b'], { strict: false });
+      expect('#classes').toHaveClass(['class-b', 'class-a'], { strict: false });
+    });
+  });
+
+  describe('toBePartial', () => {
+    it('should return true when expected is partial of actual', () => {
+      const actual: Dummy = { lorem: 'first', ipsum: 'second' };
+      expect(actual).toBePartial({ lorem: 'first' });
+    });
+
+    it('should return true when expected is same as actual', () => {
+      const actual: Dummy = { lorem: 'first', ipsum: 'second' };
+      expect(actual).toBePartial({...actual});
+    });
+
+    it('should return false when expected is not partial of actual', () => {
+      const actual: Dummy = { lorem: 'first', ipsum: 'second' };
+      expect(actual).not.toBePartial({ lorem: 'second' });
     });
   });
 });
